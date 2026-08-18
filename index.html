@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Preflop">
+<meta name="theme-color" content="#1a1a19">
+<title>Marcello's Preflop Tracker</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1:#fcfcfb; --page:#f9f9f7;
+    --ink-1:#0b0b0b; --ink-2:#52514e; --ink-3:#898781;
+    --grid:#e1e0d9; --baseline:#c3c2b7; --border:rgba(11,11,11,0.10);
+    --series-1:#2a78d6;
+    --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --critical:#d03b3b;
+    --good-wash:rgba(12,163,12,.14); --warn-wash:rgba(250,178,25,.20);
+    --serious-wash:rgba(236,131,90,.20); --critical-wash:rgba(208,59,59,.14);
+    --cell-fish:#efeeea; --cell-fish-ink:#a5a39c;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1:#1a1a19; --page:#0d0d0d;
+    --ink-1:#ffffff; --ink-2:#c3c2b7; --ink-3:#898781;
+    --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
+    --series-1:#3987e5;
+    --good-wash:rgba(12,163,12,.22); --warn-wash:rgba(250,178,25,.24);
+    --serious-wash:rgba(236,131,90,.24); --critical-wash:rgba(208,59,59,.24);
+    --cell-fish:#242423; --cell-fish-ink:#6d6c66;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --surface-1:#1a1a19; --page:#0d0d0d;
+      --ink-1:#ffffff; --ink-2:#c3c2b7; --ink-3:#898781;
+      --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
+      --series-1:#3987e5;
+      --good-wash:rgba(12,163,12,.22); --warn-wash:rgba(250,178,25,.24);
+      --serious-wash:rgba(236,131,90,.24); --critical-wash:rgba(208,59,59,.24);
+      --cell-fish:#242423; --cell-fish-ink:#6d6c66;
+    }
+  }
+  * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background:var(--page); color:var(--ink-1);
+    padding-bottom:76px; font-size:15px;
+  }
+  header {
+    padding:14px 16px 10px; display:flex; align-items:baseline; justify-content:space-between;
+  }
+  header h1 { font-size:17px; font-weight:650; letter-spacing:-.01em; }
+  header .sub { font-size:12px; color:var(--ink-3); }
+  #themeBtn { background:none; border:1px solid var(--border); border-radius:8px; color:var(--ink-2); font-size:12px; padding:4px 10px; cursor:pointer; }
+  .wrap { padding:0 12px; max-width:560px; margin:0 auto; }
+  .card {
+    background:var(--surface-1); border:1px solid var(--border); border-radius:14px;
+    padding:12px; margin-bottom:12px;
+  }
+  .card h2 { font-size:12px; font-weight:600; color:var(--ink-2); text-transform:uppercase; letter-spacing:.05em; margin-bottom:10px; }
+  /* KPI row */
+  .kpis { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:12px; }
+  .tile { background:var(--surface-1); border:1px solid var(--border); border-radius:14px; padding:10px 12px; }
+  .tile .lbl { font-size:11px; color:var(--ink-3); margin-bottom:2px; }
+  .tile .val { font-size:24px; font-weight:600; line-height:1.15; }
+  .tile .d { font-size:11px; color:var(--ink-3); margin-top:1px; }
+  .tile svg { display:block; margin-top:4px; }
+  .pos-d { color:#006300; } :root[data-theme="dark"] .pos-d { color:#0ca30c; }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .pos-d { color:#0ca30c; } }
+  .neg-d { color:var(--critical); }
+  /* feedback banner */
+  .banner { border-left:4px solid var(--baseline); border-radius:10px; background:var(--surface-1); border-top:1px solid var(--border); border-right:1px solid var(--border); border-bottom:1px solid var(--border); padding:10px 12px; margin-bottom:12px; }
+  .banner .t { font-weight:650; font-size:14px; margin-bottom:2px; display:flex; align-items:center; gap:6px; }
+  .banner .m { font-size:13px; color:var(--ink-2); line-height:1.35; }
+  /* chips */
+  .chips { display:flex; flex-wrap:wrap; gap:6px; }
+  .chip {
+    border:1px solid var(--border); background:var(--surface-1); color:var(--ink-2);
+    border-radius:999px; padding:7px 12px; font-size:13px; font-weight:500; cursor:pointer;
+  }
+  .chip.on { background:var(--series-1); border-color:var(--series-1); color:#fff; }
+  /* matrix */
+  .matrix { display:grid; grid-template-columns:repeat(13,1fr); gap:2px; }
+  .mcell {
+    aspect-ratio:1/.92; display:flex; align-items:center; justify-content:center;
+    font-size:9.5px; font-weight:600; border-radius:4px; cursor:pointer;
+    background:var(--cell-fish); color:var(--cell-fish-ink); border:0; padding:0;
+  }
+  .mcell.vY { background:var(--good); color:#fff; }
+  .mcell.vD { background:var(--warn); color:#3d2c00; }
+  .mcell.vN { background:var(--serious-wash); color:var(--ink-2); }
+  .mcell.sel { outline:2px solid var(--series-1); outline-offset:1px; }
+  .mlegend { display:flex; gap:12px; flex-wrap:wrap; margin-top:10px; font-size:11.5px; color:var(--ink-2); }
+  .mlegend span { display:inline-flex; align-items:center; gap:5px; }
+  .sw { width:11px; height:11px; border-radius:3px; display:inline-block; }
+  /* pending hand */
+  .verdict-big { font-size:17px; font-weight:700; display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+  .verdict-sub { font-size:13px; color:var(--ink-2); margin-bottom:10px; line-height:1.35; }
+  .frm label { display:block; font-size:11px; color:var(--ink-3); margin:10px 0 4px; }
+  .frm input[type=number], .frm input[type=text], .frm select, .frm textarea {
+    width:100%; padding:9px 10px; border:1px solid var(--border); border-radius:9px;
+    background:var(--page); color:var(--ink-1); font-size:15px; font-family:inherit;
+  }
+  .row2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .btnrow { display:flex; gap:8px; margin-top:12px; }
+  .btn {
+    flex:1; padding:11px; border-radius:10px; border:1px solid var(--border);
+    background:var(--surface-1); color:var(--ink-1); font-size:14px; font-weight:600; cursor:pointer;
+  }
+  .btn.primary { background:var(--series-1); border-color:var(--series-1); color:#fff; }
+  .btn.danger { color:var(--critical); }
+  .btn.small { flex:0 0 auto; padding:7px 12px; font-size:12.5px; font-weight:500; }
+  /* hand list */
+  .hrow { display:flex; align-items:center; gap:8px; padding:9px 2px; border-top:1px solid var(--grid); cursor:pointer; }
+  .hrow:first-of-type { border-top:0; }
+  .hrow .hpos { font-size:11px; color:var(--ink-3); width:38px; }
+  .hrow .hname { font-weight:650; width:44px; }
+  .hrow .hact { font-size:12px; color:var(--ink-2); flex:1; }
+  .hrow .hmoney { font-weight:600; font-size:14px; }
+  .vchip { font-size:10px; font-weight:700; border-radius:5px; padding:2px 6px; }
+  .vchip.vY { background:var(--good); color:#fff; }
+  .vchip.vD { background:var(--warn); color:#3d2c00; }
+  .vchip.vN { background:var(--serious); color:#fff; }
+  .vchip.vF { background:var(--critical); color:#fff; }
+  .hedit { padding:4px 2px 12px; border-top:1px dashed var(--grid); }
+  /* tabs */
+  nav {
+    position:fixed; bottom:0; left:0; right:0; display:flex;
+    background:var(--surface-1); border-top:1px solid var(--border);
+    padding:6px 8px calc(8px + env(safe-area-inset-bottom));
+  }
+  nav button {
+    flex:1; background:none; border:0; color:var(--ink-3); font-size:11.5px; font-weight:600;
+    padding:8px 0 4px; cursor:pointer; border-radius:10px; font-family:inherit;
+  }
+  nav button.on { color:var(--series-1); }
+  nav button .ic { display:block; font-size:17px; margin-bottom:2px; font-weight:400; }
+  .tab { display:none; } .tab.on { display:block; }
+  /* tables */
+  table { width:100%; border-collapse:collapse; font-size:12.5px; }
+  th { text-align:left; color:var(--ink-3); font-weight:600; font-size:11px; padding:6px 6px; border-bottom:1px solid var(--baseline); }
+  td { padding:7px 6px; border-bottom:1px solid var(--grid); color:var(--ink-2); }
+  td:first-child { color:var(--ink-1); }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  th.num { text-align:right; }
+  /* scatter */
+  #toast {
+    position:fixed; top:12px; left:50%; transform:translateX(-50%);
+    background:var(--ink-1); color:var(--page); font-size:13px; font-weight:600;
+    padding:10px 16px; border-radius:999px; z-index:99; display:none;
+    max-width:88vw; text-align:center; box-shadow:0 6px 20px rgba(0,0,0,.25);
+  }
+  .tooltip {
+    position:fixed; pointer-events:none; background:var(--surface-1); border:1px solid var(--border);
+    border-radius:9px; padding:7px 10px; font-size:12px; box-shadow:0 4px 16px rgba(0,0,0,.18);
+    display:none; z-index:50; max-width:220px;
+  }
+  .tooltip .tv { font-weight:700; font-size:13px; }
+  .tooltip .tl { color:var(--ink-2); }
+  .note { font-size:12px; color:var(--ink-3); line-height:1.4; margin-top:8px; }
+  .qtag { font-size:10.5px; font-weight:700; border-radius:5px; padding:2px 7px; white-space:nowrap; }
+  .q-ew { background:var(--good-wash); color:var(--good); }
+  .q-ul { background:var(--warn-wash); color:#8a6200; }
+  :root[data-theme="dark"] .q-ul { color:var(--warn); }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .q-ul { color:var(--warn); } }
+  .q-lw { background:var(--serious-wash); color:var(--serious); }
+  .q-el { background:var(--critical-wash); color:var(--critical); }
+  .sesshead { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  .sesshead .dt { font-size:13px; font-weight:600; color:var(--ink-2); }
+  #fileImport { display:none; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>Preflop Tracker</h1>
+    <div class="sub">Marcello's ranges &middot; real-time session score</div>
+  </div>
+  <button id="themeBtn">Auto</button>
+</header>
+
+<div class="wrap">
+
+  <!-- ================= SESSION TAB ================= -->
+  <div class="tab on" id="tab-session">
+    <div class="sesshead">
+      <div class="dt" id="sessDate"></div>
+      <button class="btn small" id="endSessBtn">End session</button>
+    </div>
+
+    <div class="kpis">
+      <div class="tile"><div class="lbl">Preflop score</div><div class="val" id="kScore">&ndash;</div><div class="d" id="kScoreD"></div></div>
+      <div class="tile"><div class="lbl">Session P/L</div><div class="val" id="kPL">$0</div><div class="d" id="kPLD">from hands</div></div>
+      <div class="tile"><div class="lbl">Hands</div><div class="val" id="kHands">0</div><div class="d" id="kHandsD"></div><svg id="spark" width="100%" height="22" viewBox="0 0 100 22" preserveAspectRatio="none"></svg></div>
+    </div>
+
+    <div class="banner" id="fbBanner">
+      <div class="t" id="fbTitle">Ready</div>
+      <div class="m" id="fbMsg">Pick your position, tap the hand you were dealt, and log what you did. I'll score your preflop discipline as you go.</div>
+    </div>
+
+    <div class="card">
+      <h2>Players at the table</h2>
+      <div class="frm row2" style="margin-bottom:8px">
+        <div><input type="text" id="plName" placeholder="Name / seat"></div>
+        <div style="display:flex;gap:8px">
+          <select id="plTag" style="flex:1"><option>Unknown</option><option>Fish</option><option>Reg</option><option>Aggro</option><option>Tight</option><option>Calling station</option><option>Maniac</option></select>
+          <button class="btn small" id="plAdd">Add</button>
+        </div>
+      </div>
+      <div id="playerList"><div class="note">Add the players you care about — you'll tag them in each hand and can keep notes on them.</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Your position</h2>
+      <div class="chips" id="posChips"></div>
+    </div>
+
+    <div class="card">
+      <h2>Hand dealt &middot; <span id="mtxPosLbl"></span></h2>
+      <div class="matrix" id="matrix"></div>
+      <div class="mlegend">
+        <span><span class="sw" style="background:var(--good)"></span>Open (YES)</span>
+        <span><span class="sw" style="background:var(--warn)"></span>DEPENDS</span>
+        <span><span class="sw" style="background:var(--serious-wash);border:1px solid var(--serious)"></span>NO</span>
+        <span><span class="sw" style="background:var(--cell-fish);border:1px solid var(--border)"></span>Out of range</span>
+      </div>
+    </div>
+
+    <div class="card" id="pendingCard" style="display:none">
+      <div class="verdict-big" id="pvTitle"></div>
+      <div class="verdict-sub" id="pvSub"></div>
+      <div class="frm">
+        <label>What did you do?</label>
+        <div class="chips" id="actChips"></div>
+        <label>Result (fill in when hand ends)</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div class="chips" id="pSign" style="flex:0 0 auto"></div>
+          <input type="number" id="pMoney" inputmode="numeric" placeholder="Amount" style="flex:1;min-width:0">
+        </div>
+        <label>Villain position</label><select id="pVpos"><option value="">&mdash;</option></select>
+        <label>Players in the hand</label>
+        <div class="chips" id="pPlayers"></div>
+        <div class="row2">
+          <div><label>Board</label><input type="text" id="pBoard" placeholder="e.g. K72r"></div>
+          <div><label>Board type</label><select id="pBoardType"><option value="">&mdash;</option></select></div>
+        </div>
+        <label>Postflop: how did you play it?</label>
+        <div class="chips" id="pfChips"></div>
+        <label>Notes</label>
+        <textarea id="pNote" rows="2" placeholder="Reads, why you deviated, etc."></textarea>
+      </div>
+      <div class="btnrow">
+        <button class="btn" id="pCancel">Cancel</button>
+        <button class="btn primary" id="pLog">Log hand</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Hands this session (<span id="handCount">0</span>)</h2>
+      <div id="handList"><div class="note">No hands logged yet.</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Stack tracking (optional)</h2>
+      <div class="frm row2">
+        <div><label>Total buy-ins $</label><input type="number" id="buyIn" inputmode="numeric" placeholder="1000"></div>
+        <div><label>Current stack $</label><input type="number" id="stack" inputmode="numeric" placeholder="1000"></div>
+      </div>
+      <div class="note">If you fill these in, the score-vs-money read uses your real stack P/L instead of the sum of logged hands.</div>
+    </div>
+  </div>
+
+  <!-- ================= HISTORY TAB ================= -->
+  <div class="tab" id="tab-history">
+    <div class="card">
+      <h2>Skill vs. luck &middot; score vs. profit</h2>
+      <div id="scatterBox"></div>
+      <div class="mlegend">
+        <span><span class="sw" style="background:var(--ink-3);border-radius:50%"></span>Past sessions</span>
+        <span><span class="sw" style="background:var(--series-1);border-radius:50%"></span>Current session</span>
+      </div>
+      <div class="note">Right of the line = playing your ranges. Above the line = winning. Top-right and bottom-left are earned; the other two are luck.</div>
+    </div>
+    <div class="card">
+      <h2>Sessions</h2>
+      <div style="overflow-x:auto"><table id="sessTable">
+        <thead><tr><th>Date</th><th class="num">Hands</th><th class="num">Score</th><th class="num">P/L</th><th>Read</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table></div>
+      <div class="note" id="histEmpty">No finished sessions yet. End a session and it lands here.</div>
+    </div>
+    <div class="card">
+      <h2>Backup</h2>
+      <div class="btnrow" style="margin-top:0">
+        <button class="btn" id="exportBtn">Export file</button>
+        <button class="btn" id="importBtn">Import file</button>
+      </div>
+      <input type="file" id="fileImport" accept=".json,application/json">
+      <div class="note"><strong>Important:</strong> data lives only while this page is open. Hit <em>Export</em> after every session &mdash; it downloads a small file with all sessions and your ranges. <em>Import</em> it next time to pick up where you left off.</div>
+    </div>
+  </div>
+
+  <!-- ================= RANGES TAB ================= -->
+  <div class="tab" id="tab-ranges">
+    <div class="card">
+      <h2>Opening ranges by position</h2>
+      <div class="chips" id="rPosChips" style="margin-bottom:10px"></div>
+      <div class="matrix" id="rMatrix"></div>
+      <div class="mlegend">
+        <span><span class="sw" style="background:var(--good)"></span>YES</span>
+        <span><span class="sw" style="background:var(--warn)"></span>DEPENDS</span>
+        <span><span class="sw" style="background:var(--serious-wash);border:1px solid var(--serious)"></span>NO</span>
+        <span><span class="sw" style="background:var(--cell-fish);border:1px solid var(--border)"></span>Out of range</span>
+      </div>
+      <div class="btnrow"><button class="btn" id="rEditBtn">Edit ranges</button></div>
+      <div class="note" id="rEditNote">These are your ranges, straight from Sessions_2024. Tap <em>Edit ranges</em>, then tap any cell to cycle YES &rarr; DEPENDS &rarr; NO &rarr; out. Changes apply immediately and are included in exports.</div>
+    </div>
+  </div>
+
+  <!-- ================= FLOP TAB ================= -->
+  <div class="tab" id="tab-flop">
+    <div class="card"><h2>IP heads-up &middot; flop</h2><div style="overflow-x:auto"><table id="tblIP"></table></div></div>
+    <div class="card"><h2>OOP heads-up &middot; flop</h2><div style="overflow-x:auto"><table id="tblOOP"></table></div></div>
+    <div class="card"><h2>Multi-way &middot; flop</h2><div style="overflow-x:auto"><table id="tblMW"></table></div></div>
+    <div class="note" style="padding:0 4px 12px">Your flop structure, from the Structure sheet. Frequencies and sizings as you wrote them; &ldquo;Size 2 is live-adjust.&rdquo;</div>
+  </div>
+
+</div>
+
+<nav>
+  <button data-tab="session" class="on"><span class="ic">&#9824;</span>Session</button>
+  <button data-tab="history"><span class="ic">&#9670;</span>History</button>
+  <button data-tab="ranges"><span class="ic">&#9638;</span>Ranges</button>
+  <button data-tab="flop"><span class="ic">&#9776;</span>Flop</button>
+</nav>
+
+<div class="tooltip" id="tooltip"></div>
+<div id="toast"></div>
+
+<script>
+'use strict';
+/* ====== DATA: Marcello's ranges (from Sessions_2024.xlsx, Range sheet) ======
+   Position columns: [Early, Middle, Lowjack, Highjack, Cutoff, BTN, SB, BB]
+   Y=YES D=DEPENDS N=NO; hands absent from the grids are out of range (FISH). */
+const RANGES_DEFAULT = {"pairs":{"AA":"YYYYYYYY","KK":"YYYYYYYY","QQ":"YYYYYYYY","JJ":"YYYYYYYY","TT":"YYYYYYYY","99":"YYYYYYYY","88":"YYYYYYYY","77":"DDDYYYYY","66":"DDDDYYYY","55":"NDDDYYYY","44":"NNDDYYYY","33":"NNDDDYYY","22":"NNDDDYYY"},"suited":{"AK":"YYYYYYYY","AQ":"YYYYYYYY","AJ":"YYYYYYYY","AT":"YYYYYYYY","KQ":"YYYYYYYY","KJ":"DDYYYYYY","KT":"NDDYYYYY","QJ":"NNDYYYYY","QT":"NNDYYYYY","JT":"NNDDYYYY","A9":"NNNDYYDD","A8":"NNNDDYDD","A7":"NNNDDYDD","A6":"NNNDDYDD","A5":"NNDDYYDD","A4":"NNNDYYDD","A3":"NNNDYYDD","A2":"NNNDDYDD","T9":"NNDDYYDD","98":"NNNDYYDD","87":"NNNDDYDD","76":"NNNDDYDD","65":"NNNDDYDD","54":"NNNNNYND","K9":"NNNNDDDD","Q9":"NNNNDDDD","J9":"NNNNDDDD","J8":"NNNNDDDD","T8":"NNNNDDDD","97":"NNNNNDNN","T7":"NNNNNDNN"},"off":{"AK":"YYYYYYYY","AQ":"YYYYYYYY","AJ":"NNDYYYDD","AT":"NNNDDDDD","KQ":"NNDDDYDD","KJ":"NNNNDDDD","KT":"NNNNDDDD","QJ":"NNNNDDDD","QT":"NNNNDDDD","JT":"NNNNDDDD","A9":"NNNNNDND","A5":"NNNNNDND","A4":"NNNNNDND","A3":"NNNNNDND"}};
+
+const POSITIONS = ['UTG','UTG 1','MP','HJ','CO','BTN','SB','BB','BB 2'];
+const POSCOL = {'UTG':0,'UTG 1':0,'MP':2,'HJ':3,'CO':4,'BTN':5,'SB':6,'BB':7,'BB 2':7};
+const RANKS = ['A','K','Q','J','T','9','8','7','6','5','4','3','2'];
+const ACTIONS = ['Open','ROL','Call','3!','C3!','F3!','4!','C4!','F4!','5!-AI','X','L/C'];
+const BOARD_TYPES = ['Two wrap High A-10','Two wrap Mid 10-6','Two wrap Low 5-2','3-card straight high-mid 8+','3-card straight low 7-','Monotone','Paired','A,X,X','K,X,X','Q,X,X','J,X,X','10,X,X','Two high cards 10+','Low / rag','Other'];
+const WEIGHTS = { Y:100, D:70, N:25, F:0 };
+const SCORE_GOOD = 70;
+
+const STRUCTURE = {
+  IP: { head:['Board type','Action','Freq','Size 1','Size 2'], rows:[
+    ['Two wrap High A-10','Bet','90%','75%','80%'],['Two wrap Mid 10-6','Bet','','',''],
+    ['Two wrap Low 5-2','Bet','','',''],['3-card straight high-mid 8+','Bet','90%','33%','50%'],
+    ['3-card straight low 7-','Check','90%','',''],['Monotone','Bet','50%','33%',''],
+    ['A,X,X','Bet','90%','33%',''],['K,X,X','Bet','90%','33%',''],
+    ['Q,X,X','Bet','70%','33%',''],['J,X,X','Bet','60%','33%',''],['10,X,X','Bet','50%','33%','']]},
+  OOP: { head:['Board type','Action','Freq','Size 1','Size 2'], rows:[
+    ['A,K-10,X','Bet','100%','33%','50%'],['A,9-2,X','Check','100%','',''],
+    ['10,X,X','Check','100%','',''],['Monotone','Check','100%','','']]},
+  MW: { head:['Board type','Villains IP','Action','Freq','Size 1'], rows:[
+    ['Any','2+','Check','100%',''],['Two high cards 10+','1','Bet','90%','33%'],
+    ['10,X,X','1','Check','90%',''],['3-card straight mid','1','Check','100%',''],
+    ['Monotone','1','Check','100%',''],['3-card straight low','0','Check','100%',''],
+    ['A,X,X','0','Bet','90%','33%'],['K,X,X','0','Bet','90%','33%'],
+    ['Q,X,X','0','Bet','70%','33%'],['J,X,X','0','Bet','60%','33%'],['10,X,X','0','Bet','50%','33%']]}
+};
+
+/* ====== STATE (in-memory; export/import for persistence) ====== */
+let state = {
+  ranges: JSON.parse(JSON.stringify(RANGES_DEFAULT)),
+  sessions: [],
+  players: [],            // {id, name, tag, note} — persists across sessions via export
+  current: newSession()
+};
+function newSession(){
+  return { date: new Date().toISOString().slice(0,10), startedAt: Date.now(),
+           hands: [], buyIn: null, stack: null };
+}
+let selPos = 'BTN', rSelPos = 'BTN', rEditMode = false;
+let pending = null;   // {hand, type, key}
+let dirty = false;
+/* Auto-save: works when the app runs from a real web address (hosted page or
+   home-screen app). Silently unavailable in sandboxed previews — export still works. */
+let storageOK = false;
+function persistLocal(){
+  try {
+    localStorage.setItem('pfTracker', JSON.stringify({ v:1, ranges:state.ranges, sessions:state.sessions, players:state.players, current:state.current }));
+    storageOK = true; return true;
+  } catch(e){ storageOK = false; return false; }
+}
+function loadLocal(){
+  try {
+    const raw = localStorage.getItem('pfTracker');
+    if (!raw) { localStorage.setItem('pfTest','1'); localStorage.removeItem('pfTest'); storageOK = true; return; }
+    const d = JSON.parse(raw);
+    if (d.ranges) state.ranges = d.ranges;
+    if (Array.isArray(d.sessions)) state.sessions = d.sessions;
+    if (Array.isArray(d.players)) state.players = d.players;
+    if (d.current && Array.isArray(d.current.hands)) state.current = d.current;
+    storageOK = true;
+  } catch(e){ storageOK = false; }
+}
+setInterval(()=>{ if (dirty && persistLocal()) dirty = false; }, 3000);
+
+/* ====== HELPERS ====== */
+const $ = id => document.getElementById(id);
+function handInfo(i,j){ // matrix cell -> {key,type,label}
+  if (i===j) return { key:RANKS[i]+RANKS[i], type:'pairs', label:RANKS[i]+RANKS[i] };
+  const hi = Math.min(i,j), lo = Math.max(i,j);
+  const key = RANKS[hi]+RANKS[lo];
+  return j>i ? { key, type:'suited', label:key+'s' } : { key, type:'off', label:key+'o' };
+}
+function verdictFor(key, type, pos){
+  const code = state.ranges[type][key];
+  if (!code) return 'F';
+  return code[POSCOL[pos]] || 'F';
+}
+const VLABEL = { Y:'YES — open it', D:'DEPENDS', N:'NO', F:'BURRO!' };
+const VSHORT = { Y:'YES', D:'DEP', N:'NO', F:'BURRO' };
+const VEXPL = {
+  Y: p => 'In your opening range from '+p+'. Standard play.',
+  D: p => 'Judgment call from '+p+' — depends on the table, the action in front, and the players behind. Have a reason.',
+  N: p => 'In your grid but marked NO from '+p+'. You know this one is a fold here.',
+  F: p => 'Not in any of your ranges. If you played this from '+p+', that’s a burro move — log it and own it.'
+};
+function fmtMoney(v){
+  if (v===null||v===undefined||isNaN(v)) return '$0';
+  const s = v<0?'-':'', a = Math.abs(Math.round(v));
+  return s+'$'+a.toLocaleString('en-US');
+}
+function esc(el, txt){ el.textContent = txt; }
+let toastTimer = null;
+function showToast(msg, ms){
+  const t = $('toast'); esc(t, msg); t.style.display='block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>{ t.style.display='none'; }, ms||3200);
+}
+
+/* ====== SCORING & FEEDBACK ====== */
+function sessionScore(hands){
+  if (!hands.length) return null;
+  const t = hands.reduce((a,h)=>a+WEIGHTS[h.verdict],0);
+  return Math.round(t/hands.length);
+}
+function sessionPL(s){
+  const handSum = s.hands.reduce((a,h)=>a+(h.money||0),0);
+  if (s.buyIn!==null && s.stack!==null && !isNaN(s.buyIn) && !isNaN(s.stack))
+    return { pl: s.stack - s.buyIn, src:'stack' };
+  return { pl: handSum, src:'hands' };
+}
+function quadrant(score, pl){
+  if (score===null) return null;
+  const well = score>=SCORE_GOOD, win = pl>=0;
+  if (well && win)  return { tag:'Earned win',  cls:'q-ew', color:'var(--good)',
+    msg:'Playing your ranges and winning. This is your game working — nothing to change.' };
+  if (well && !win) return { tag:'Bad luck',    cls:'q-ul', color:'var(--warn)',
+    msg:'Discipline is high but you’re down. That’s variance, not a leak — do not start chasing. Keep playing your ranges.' };
+  if (!well && win) return { tag:'Lucky win',   cls:'q-lw', color:'var(--serious)',
+    msg:'You’re up, but you’re playing outside your ranges. That money is luck, not skill — tighten up before it turns around.' };
+  return               { tag:'Earned loss', cls:'q-el', color:'var(--critical)',
+    msg:'Out of range and paying for it. The loss is earned — get back to your ranges right now.' };
+}
+
+/* ====== RENDER: session KPIs & feedback ====== */
+function renderKPIs(){
+  const s = state.current, hands = s.hands;
+  const score = sessionScore(hands);
+  const { pl, src } = sessionPL(s);
+  esc($('kScore'), score===null?'–':String(score));
+  esc($('kScoreD'), score===null?'no hands yet':(score>=SCORE_GOOD?'on your game':'off the ranges'));
+  const kpl = $('kPL'); esc(kpl, fmtMoney(pl));
+  kpl.className = 'val ' + (pl>0?'pos-d':(pl<0?'neg-d':''));
+  esc($('kPLD'), src==='stack'?'from stack count':'from logged hands');
+  esc($('kHands'), String(hands.length));
+  const counts = {Y:0,D:0,N:0,F:0}; hands.forEach(h=>counts[h.verdict]++);
+  esc($('kHandsD'), hands.length? (counts.Y+' yes · '+counts.D+' dep · '+(counts.N+counts.F)+' bad') : '');
+  renderSpark();
+  // feedback banner
+  const b = $('fbBanner'), q = hands.length>=3 ? quadrant(score, pl) : null;
+  if (!q){
+    b.style.borderLeftColor = 'var(--baseline)';
+    esc($('fbTitle'), hands.length? 'Building your read…' : 'Ready');
+    esc($('fbMsg'), hands.length? 'Log a few more hands and I’ll tell you if the money matches the play.'
+      : 'Pick your position, tap the hand you were dealt, and log what you did. I’ll score your preflop discipline as you go.');
+  } else {
+    b.style.borderLeftColor = q.color;
+    esc($('fbTitle'), q.tag + ' · score ' + score + ', ' + fmtMoney(pl));
+    esc($('fbMsg'), q.msg);
+  }
+}
+function renderSpark(){
+  const svg = $('spark'); svg.innerHTML='';
+  const hands = state.current.hands;
+  if (hands.length<2) return;
+  let cum=0; const pts = hands.map(h=>cum+=(h.money||0));
+  const min=Math.min(0,...pts), max=Math.max(0,...pts), span=(max-min)||1;
+  const xs = pts.map((v,i)=>[(i/(pts.length-1))*96+2, 20-((v-min)/span)*18+1]);
+  const d = xs.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
+  const path = document.createElementNS('http://www.w3.org/2000/svg','path');
+  path.setAttribute('d',d); path.setAttribute('fill','none');
+  path.setAttribute('stroke','var(--ink-3)'); path.setAttribute('stroke-width','1.5');
+  path.setAttribute('stroke-linejoin','round'); path.setAttribute('stroke-linecap','round');
+  svg.appendChild(path);
+  const last = xs[xs.length-1];
+  const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
+  dot.setAttribute('cx',last[0]); dot.setAttribute('cy',last[1]); dot.setAttribute('r','2.4');
+  dot.setAttribute('fill','var(--series-1)');
+  svg.appendChild(dot);
+}
+
+/* ====== RENDER: position chips & matrix ====== */
+function renderChips(elId, sel, onPick){
+  const box = $(elId); box.innerHTML='';
+  POSITIONS.forEach(p=>{
+    const c = document.createElement('button');
+    c.className = 'chip'+(p===sel?' on':''); esc(c,p);
+    c.onclick = ()=>onPick(p);
+    box.appendChild(c);
+  });
+}
+function renderMatrix(elId, pos, selKeyType, onPick){
+  const box = $(elId); box.innerHTML='';
+  for (let i=0;i<13;i++) for (let j=0;j<13;j++){
+    const h = handInfo(i,j);
+    const v = verdictFor(h.key,h.type,pos);
+    const c = document.createElement('button');
+    c.className = 'mcell v'+v + (selKeyType && selKeyType.key===h.key && selKeyType.type===h.type ? ' sel':'');
+    esc(c,h.label);
+    c.setAttribute('aria-label', h.label+' — '+VSHORT[v]);
+    c.onclick = ()=>onPick(h,v);
+    box.appendChild(c);
+  }
+}
+function refreshSessionMatrix(){
+  esc($('mtxPosLbl'), 'from '+selPos);
+  renderMatrix('matrix', selPos, pending, (h)=>openPending(h));
+}
+
+/* ====== PLAYERS ====== */
+let expandedPlayerId = null;
+function playerById(id){ return state.players.find(p=>p.id===id); }
+$('plAdd').onclick = ()=>{
+  const name = $('plName').value.trim();
+  if (!name) return;
+  state.players.push({ id: Date.now()+Math.random(), name, tag: $('plTag').value, note:'' });
+  $('plName').value=''; dirty=true;
+  renderPlayerList(); renderPPlayers();
+};
+$('plName').addEventListener('keydown', e=>{ if(e.key==='Enter') $('plAdd').click(); });
+function renderPlayerList(){
+  const box = $('playerList'); box.innerHTML='';
+  if (!state.players.length){ const n=document.createElement('div'); n.className='note'; esc(n,'Add the players you care about — you\'ll tag them in each hand and can keep notes on them.'); box.appendChild(n); return; }
+  state.players.forEach(p=>{
+    const r=document.createElement('div'); r.className='hrow';
+    const nm=document.createElement('span'); nm.className='hname'; nm.style.width='auto'; nm.style.flex='1'; esc(nm,p.name);
+    const tg=document.createElement('span'); tg.className='vchip '+({'Fish':'vF','Maniac':'vF','Aggro':'vN','Calling station':'vN','Reg':'vD','Tight':'vD'}[p.tag]||'');
+    if(!tg.className.includes('v')) { tg.style.background='var(--cell-fish)'; tg.style.color='var(--ink-2)'; }
+    esc(tg,p.tag);
+    const nt=document.createElement('span'); nt.className='hact'; esc(nt, p.note? p.note : '');
+    r.append(nm,tg,nt);
+    r.onclick=()=>{ expandedPlayerId = expandedPlayerId===p.id?null:p.id; renderPlayerList(); };
+    box.appendChild(r);
+    if (expandedPlayerId===p.id){
+      const e=document.createElement('div'); e.className='hedit frm';
+      const l1=document.createElement('label'); esc(l1,'Read / note on '+p.name);
+      const ta=document.createElement('textarea'); ta.rows=2; ta.value=p.note||'';
+      ta.onclick=ev=>ev.stopPropagation();
+      ta.onchange=()=>{ p.note=ta.value.trim(); dirty=true; renderPlayerList(); };
+      const l2=document.createElement('label'); esc(l2,'Type');
+      const sel=document.createElement('select');
+      ['Unknown','Fish','Reg','Aggro','Tight','Calling station','Maniac'].forEach(t=>{ const o=document.createElement('option'); o.value=t; esc(o,t); if(t===p.tag)o.selected=true; sel.appendChild(o); });
+      sel.onclick=ev=>ev.stopPropagation();
+      sel.onchange=()=>{ p.tag=sel.value; dirty=true; renderPlayerList(); };
+      const del=document.createElement('button'); del.className='btn danger small'; del.style.marginTop='10px'; esc(del,'Remove player');
+      del.onclick=ev=>{ ev.stopPropagation(); state.players=state.players.filter(x=>x.id!==p.id); dirty=true; expandedPlayerId=null; renderPlayerList(); renderPPlayers(); };
+      e.append(l1,ta,l2,sel,del);
+      box.appendChild(e);
+    }
+  });
+}
+
+/* ====== PENDING HAND ====== */
+let pAction = 'Open', pPostflop = '', pInHand = [], pNeg = true;
+function absAmt(raw){ const v = parseFloat(String(raw).replace(/[^0-9.]/g,'')); return isNaN(v)?0:Math.abs(v); }
+function renderSignChips(){
+  const box=$('pSign'); box.innerHTML='';
+  [['Lost',true],['Won',false]].forEach(([lbl,neg])=>{
+    const c=document.createElement('button'); c.className='chip'+(pNeg===neg?' on':''); esc(c,lbl);
+    if(pNeg===neg){ c.style.background = neg?'var(--critical)':'var(--good)'; c.style.borderColor = neg?'var(--critical)':'var(--good)'; c.style.color='#fff'; }
+    c.onclick=()=>{ pNeg=neg; renderSignChips(); };
+    box.appendChild(c);
+  });
+}
+function renderPPlayers(){
+  const box = $('pPlayers'); if(!box) return;
+  box.innerHTML='';
+  if (!state.players.length){ const n=document.createElement('span'); n.className='note'; esc(n,'Add players above to tag them here.'); box.appendChild(n); return; }
+  state.players.forEach(p=>{
+    const c=document.createElement('button'); c.className='chip'+(pInHand.includes(p.id)?' on':'');
+    esc(c, p.name+(p.tag && p.tag!=='Unknown' ? ' · '+p.tag : ''));
+    c.onclick=()=>{ pInHand = pInHand.includes(p.id) ? pInHand.filter(x=>x!==p.id) : [...pInHand, p.id]; renderPPlayers(); };
+    box.appendChild(c);
+  });
+}
+function openPending(h){
+  pending = h; pAction='Open'; pPostflop=''; pInHand=[]; pNeg=true;
+  const v = verdictFor(h.key,h.type,selPos);
+  const card = $('pendingCard'); card.style.display='block';
+  const t = $('pvTitle');
+  t.innerHTML='';
+  const chip = document.createElement('span'); chip.className='vchip v'+v; esc(chip,VSHORT[v]);
+  const name = document.createElement('span'); esc(name, h.label+' from '+selPos);
+  t.appendChild(chip); t.appendChild(name);
+  esc($('pvSub'), VEXPL[v](selPos));
+  $('pMoney').value=''; $('pBoard').value=''; $('pNote').value='';
+  $('pBoardType').value=''; $('pVpos').value='';
+  renderActChips(); renderPfChips(); renderPPlayers(); renderSignChips();
+  refreshSessionMatrix();
+  card.scrollIntoView({behavior:'smooth', block:'center'});
+}
+function renderActChips(){
+  const box=$('actChips'); box.innerHTML='';
+  ACTIONS.forEach(a=>{
+    const c=document.createElement('button'); c.className='chip'+(a===pAction?' on':''); esc(c,a);
+    c.onclick=()=>{ pAction=a; renderActChips(); };
+    box.appendChild(c);
+  });
+}
+function renderPfChips(){
+  const box=$('pfChips'); box.innerHTML='';
+  ['','Good','Bad'].forEach(p=>{
+    const c=document.createElement('button'); c.className='chip'+(p===pPostflop?' on':''); esc(c, p===''?'—':p);
+    c.onclick=()=>{ pPostflop=p; renderPfChips(); };
+    box.appendChild(c);
+  });
+}
+$('pCancel').onclick = ()=>{ pending=null; $('pendingCard').style.display='none'; refreshSessionMatrix(); };
+$('pLog').onclick = ()=>{
+  if (!pending) return;
+  const v = verdictFor(pending.key,pending.type,selPos);
+  const a = absAmt($('pMoney').value);
+  const m = pNeg ? -a : a;
+  state.current.hands.push({
+    id: Date.now()+Math.random(), pos:selPos, key:pending.key, type:pending.type,
+    label:pending.label, verdict:v, action:pAction,
+    money: m, vpos:$('pVpos').value,
+    players: pInHand.map(id=>{ const p=playerById(id); return p?p.name:''; }).filter(Boolean),
+    board:$('pBoard').value.trim(), boardType:$('pBoardType').value,
+    postflop:pPostflop, note:$('pNote').value.trim()
+  });
+  dirty = true;
+  pending=null; $('pendingCard').style.display='none';
+  refreshSessionMatrix(); renderHandList(); renderKPIs(); renderScatter();
+};
+
+/* ====== HAND LIST ====== */
+let expandedId = null;
+function renderHandList(){
+  const hands = state.current.hands;
+  esc($('handCount'), String(hands.length));
+  const box = $('handList'); box.innerHTML='';
+  if (!hands.length){ const n=document.createElement('div'); n.className='note'; esc(n,'No hands logged yet.'); box.appendChild(n); return; }
+  [...hands].reverse().forEach(h=>{
+    const r = document.createElement('div'); r.className='hrow';
+    const pos=document.createElement('span'); pos.className='hpos'; esc(pos,h.pos);
+    const nm=document.createElement('span'); nm.className='hname'; esc(nm,h.label);
+    const vc=document.createElement('span'); vc.className='vchip v'+h.verdict; esc(vc,VSHORT[h.verdict]);
+    const act=document.createElement('span'); act.className='hact';
+    esc(act, h.action + (h.boardType?' · '+h.boardType:'') + (h.postflop?' · pf '+h.postflop.toLowerCase():''));
+    const mo=document.createElement('span'); mo.className='hmoney '+(h.money>0?'pos-d':(h.money<0?'neg-d':'')); esc(mo,fmtMoney(h.money));
+    r.append(pos,nm,vc,act,mo);
+    r.onclick=()=>{ expandedId = expandedId===h.id?null:h.id; renderHandList(); };
+    box.appendChild(r);
+    if (expandedId===h.id){
+      const e=document.createElement('div'); e.className='hedit frm';
+      const l1=document.createElement('label'); esc(l1,'Result');
+      const rowm=document.createElement('div'); rowm.style.cssText='display:flex;gap:8px;align-items:center';
+      let hneg = h.money < 0 || h.money === 0;
+      const lostB=document.createElement('button'); lostB.className='chip'; esc(lostB,'Lost');
+      const wonB=document.createElement('button'); wonB.className='chip'; esc(wonB,'Won');
+      function paintSign(){
+        lostB.style.cssText = hneg ? 'background:var(--critical);border-color:var(--critical);color:#fff' : '';
+        wonB.style.cssText = !hneg ? 'background:var(--good);border-color:var(--good);color:#fff' : '';
+      }
+      paintSign();
+      const inp=document.createElement('input'); inp.type='number'; inp.setAttribute('inputmode','numeric'); inp.placeholder='Amount';
+      inp.value = h.money ? Math.abs(h.money) : ''; inp.style.cssText='flex:1;min-width:0';
+      function applyMoney(){ const a=absAmt(inp.value); h.money = hneg ? -a : a; dirty=true; renderKPIs(); renderScatter(); }
+      lostB.onclick=ev=>{ ev.stopPropagation(); hneg=true; paintSign(); applyMoney(); };
+      wonB.onclick=ev=>{ ev.stopPropagation(); hneg=false; paintSign(); applyMoney(); };
+      inp.onclick=ev=>ev.stopPropagation();
+      inp.onchange=()=>{ applyMoney(); renderHandList(); };
+      rowm.append(lostB,wonB,inp);
+      const l2=document.createElement('label'); esc(l2,'Note');
+      const ta=document.createElement('textarea'); ta.rows=2; ta.value=h.note||'';
+      ta.onclick=ev=>ev.stopPropagation();
+      ta.onchange=()=>{ h.note=ta.value.trim(); dirty=true; };
+      const meta = [];
+      if (h.board) meta.push('Board: '+h.board);
+      if (h.vpos) meta.push('vs '+h.vpos);
+      if (h.players && h.players.length) meta.push('In hand: '+h.players.join(', '));
+      if (meta.length){ const b=document.createElement('div'); b.className='note'; esc(b, meta.join(' · ')); e.appendChild(b); }
+      const del=document.createElement('button'); del.className='btn danger small'; del.style.marginTop='10px'; esc(del,'Delete hand');
+      del.onclick=ev=>{ ev.stopPropagation(); state.current.hands = state.current.hands.filter(x=>x.id!==h.id); dirty=true; expandedId=null; renderHandList(); renderKPIs(); renderScatter(); };
+      e.append(l1,rowm,l2,ta,del);
+      box.appendChild(e);
+    }
+  });
+}
+
+/* ====== END SESSION ====== */
+$('endSessBtn').onclick = ()=>{
+  const s = state.current;
+  if (!s.hands.length){ showToast('No hands logged yet — nothing to save.'); return; }
+  const score = sessionScore(s.hands), { pl } = sessionPL(s);
+  const q = quadrant(score, pl);
+  state.sessions.push({ date:s.date, hands:s.hands.length, score, pl, tag:q?q.tag:'', detail:s });
+  state.current = newSession();
+  $('buyIn').value=''; $('stack').value='';
+  dirty = true;
+  renderAll();
+  showToast('Session saved: score '+score+', '+fmtMoney(pl)+(q?' — '+q.tag:'')+'. Export from History to back it up.', 5000);
+};
+$('buyIn').onchange = e=>{ const v=parseFloat(e.target.value); state.current.buyIn=isNaN(v)?null:v; dirty=true; renderKPIs(); };
+$('stack').onchange = e=>{ const v=parseFloat(e.target.value); state.current.stack=isNaN(v)?null:v; dirty=true; renderKPIs(); };
+
+/* ====== HISTORY: scatter + table ====== */
+function scatterData(){
+  const pts = state.sessions.map((s,i)=>({x:s.score,y:s.pl,label:s.date,cur:false,i}));
+  const cs = state.current;
+  if (cs.hands.length){
+    const sc = sessionScore(cs.hands), { pl } = sessionPL(cs);
+    pts.push({x:sc,y:pl,label:'Current · '+cs.date,cur:true,i:-1});
+  }
+  return pts;
+}
+function renderScatter(){
+  const box = $('scatterBox'); box.innerHTML='';
+  const pts = scatterData();
+  if (!pts.length){ const n=document.createElement('div'); n.className='note'; esc(n,'Finish a session (or log some hands) and your sessions plot here.'); box.appendChild(n); return; }
+  const W=520, H=300, m={t:16,r:14,b:34,l:46};
+  const iw=W-m.l-m.r, ih=H-m.t-m.b;
+  const ymax=Math.max(100, ...pts.map(p=>Math.abs(p.y)))*1.15;
+  const X=v=>m.l+(v/100)*iw, Y=v=>m.t+ih/2-(v/ymax)*(ih/2);
+  const NS='http://www.w3.org/2000/svg';
+  const svg=document.createElementNS(NS,'svg');
+  svg.setAttribute('viewBox','0 0 '+W+' '+H); svg.setAttribute('width','100%');
+  svg.style.display='block';
+  function el(t,attrs,txt){ const e=document.createElementNS(NS,t); for(const k in attrs) e.setAttribute(k,attrs[k]); if(txt!==undefined) e.textContent=txt; svg.appendChild(e); return e; }
+  // quadrant washes
+  el('rect',{x:X(SCORE_GOOD),y:m.t,width:X(100)-X(SCORE_GOOD),height:ih/2,fill:'var(--good-wash)'});
+  el('rect',{x:m.l,y:m.t,width:X(SCORE_GOOD)-m.l,height:ih/2,fill:'var(--serious-wash)',opacity:'.55'});
+  el('rect',{x:X(SCORE_GOOD),y:m.t+ih/2,width:X(100)-X(SCORE_GOOD),height:ih/2,fill:'var(--warn-wash)',opacity:'.5'});
+  el('rect',{x:m.l,y:m.t+ih/2,width:X(SCORE_GOOD)-m.l,height:ih/2,fill:'var(--critical-wash)'});
+  // quadrant labels
+  const lb={fill:'var(--ink-3)','font-size':'10','font-family':'inherit'};
+  el('text',Object.assign({x:X(100)-4,y:m.t+12,'text-anchor':'end'},lb),'EARNED WIN');
+  el('text',Object.assign({x:m.l+4,y:m.t+12},lb),'LUCKY WIN');
+  el('text',Object.assign({x:X(100)-4,y:m.t+ih-4,'text-anchor':'end'},lb),'BAD LUCK');
+  el('text',Object.assign({x:m.l+4,y:m.t+ih-4},lb),'EARNED LOSS');
+  // axes
+  el('line',{x1:m.l,y1:Y(0),x2:W-m.r,y2:Y(0),stroke:'var(--baseline)','stroke-width':'1'});
+  el('line',{x1:X(SCORE_GOOD),y1:m.t,x2:X(SCORE_GOOD),y2:m.t+ih,stroke:'var(--baseline)','stroke-width':'1'});
+  // ticks
+  [0,25,50,70,100].forEach(v=>{
+    el('text',{x:X(v),y:H-14,'text-anchor':'middle',fill:'var(--ink-3)','font-size':'10'},String(v));
+  });
+  el('text',{x:X(50),y:H-2,'text-anchor':'middle',fill:'var(--ink-3)','font-size':'10'},'preflop score');
+  [[ymax,'+'],[0,''],[-ymax,'-']].forEach(([v,s])=>{
+    el('text',{x:m.l-6,y:Y(v)+3,'text-anchor':'end',fill:'var(--ink-3)','font-size':'10'},
+      v===0?'$0':(s+'$'+Math.round(Math.abs(v)).toLocaleString('en-US')));
+  });
+  // points
+  const tip=$('tooltip');
+  pts.forEach(p=>{
+    const cx=X(Math.max(0,Math.min(100,p.x))), cy=Y(Math.max(-ymax,Math.min(ymax,p.y)));
+    el('circle',{cx,cy,r:'7',fill:'var(--surface-1)'});
+    el('circle',{cx,cy,r:'5',fill:p.cur?'var(--series-1)':'var(--ink-3)'});
+    const hit=el('circle',{cx,cy,r:'14',fill:'transparent',tabindex:'0',role:'img','aria-label':p.label+' score '+p.x+' '+fmtMoney(p.y)});
+    hit.style.cursor='pointer';
+    function show(ev){
+      tip.innerHTML='';
+      const tv=document.createElement('div'); tv.className='tv'; esc(tv, 'Score '+p.x+' · '+fmtMoney(p.y));
+      const tl=document.createElement('div'); tl.className='tl'; esc(tl,p.label);
+      tip.append(tv,tl);
+      tip.style.display='block';
+      const e=ev.touches?ev.touches[0]:ev;
+      tip.style.left=Math.min(window.innerWidth-190,(e.clientX+10))+'px';
+      tip.style.top=(e.clientY-44)+'px';
+    }
+    hit.addEventListener('pointermove',show);
+    hit.addEventListener('pointerdown',show);
+    hit.addEventListener('focus',ev=>{ const r=hit.getBoundingClientRect(); show({clientX:r.left+14,clientY:r.top}); });
+    hit.addEventListener('pointerleave',()=>tip.style.display='none');
+    hit.addEventListener('blur',()=>tip.style.display='none');
+  });
+  box.appendChild(svg);
+  document.addEventListener('scroll',()=>tip.style.display='none',{passive:true});
+}
+function renderSessTable(){
+  const tb = $('sessTable').querySelector('tbody'); tb.innerHTML='';
+  $('histEmpty').style.display = state.sessions.length?'none':'block';
+  [...state.sessions].reverse().forEach((s,ri)=>{
+    const idx = state.sessions.length-1-ri;
+    const tr=document.createElement('tr');
+    function td(txt,cls){ const c=document.createElement('td'); if(cls)c.className=cls; esc(c,txt); tr.appendChild(c); return c; }
+    td(s.date); td(String(s.hands),'num'); td(String(s.score),'num');
+    const plc = td(fmtMoney(s.pl),'num'); plc.className='num '+(s.pl>0?'pos-d':(s.pl<0?'neg-d':''));
+    const tagTd=document.createElement('td');
+    const q=document.createElement('span');
+    const cls={'Earned win':'q-ew','Bad luck':'q-ul','Lucky win':'q-lw','Earned loss':'q-el'}[s.tag]||'';
+    q.className='qtag '+cls; esc(q,s.tag||'–'); tagTd.appendChild(q); tr.appendChild(tagTd);
+    const xTd=document.createElement('td');
+    const xb=document.createElement('button'); xb.className='btn danger small'; esc(xb,'×');
+    let armed=false, armTimer=null;
+    xb.onclick=()=>{
+      if(!armed){ armed=true; esc(xb,'Sure?'); armTimer=setTimeout(()=>{ armed=false; esc(xb,'×'); },2500); return; }
+      clearTimeout(armTimer);
+      state.sessions.splice(idx,1); dirty=true; renderSessTable(); renderScatter();
+    };
+    xTd.appendChild(xb); tr.appendChild(xTd);
+    tb.appendChild(tr);
+  });
+}
+
+/* ====== RANGES TAB ====== */
+const CYCLE = { Y:'D', D:'N', N:'F', F:'Y' };
+function refreshRangeMatrix(){
+  renderMatrix('rMatrix', rSelPos, null, (h,v)=>{
+    if (!rEditMode) return;
+    const col = POSCOL[rSelPos];
+    let code = state.ranges[h.type][h.key] || 'FFFFFFFF';
+    const nv = CYCLE[v];
+    state.ranges[h.type][h.key] = code.slice(0,col) + nv + code.slice(col+1);
+    dirty = true;
+    refreshRangeMatrix(); refreshSessionMatrix();
+  });
+}
+$('rEditBtn').onclick = ()=>{
+  rEditMode = !rEditMode;
+  esc($('rEditBtn'), rEditMode?'Done editing':'Edit ranges');
+  $('rEditBtn').classList.toggle('primary', rEditMode);
+};
+
+/* ====== FLOP TAB ====== */
+function renderStructTable(id, spec){
+  const t = $(id); t.innerHTML='';
+  const thead=document.createElement('thead'); const hr=document.createElement('tr');
+  spec.head.forEach(h=>{ const th=document.createElement('th'); esc(th,h); hr.appendChild(th); });
+  thead.appendChild(hr); t.appendChild(thead);
+  const tb=document.createElement('tbody');
+  spec.rows.forEach(r=>{
+    const tr=document.createElement('tr');
+    r.forEach(c=>{ const td=document.createElement('td'); esc(td,c||'–'); tr.appendChild(td); });
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+}
+
+/* ====== EXPORT / IMPORT ====== */
+$('exportBtn').onclick = ()=>{
+  const data = JSON.stringify({ v:1, exported:new Date().toISOString(),
+    ranges:state.ranges, sessions:state.sessions, players:state.players, current:state.current }, null, 1);
+  const blob = new Blob([data], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'preflop-tracker-'+new Date().toISOString().slice(0,10)+'.json';
+  a.click(); URL.revokeObjectURL(a.href);
+  dirty = false;
+};
+$('importBtn').onclick = ()=>$('fileImport').click();
+$('fileImport').onchange = e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const rd = new FileReader();
+  rd.onload = ()=>{
+    try {
+      const d = JSON.parse(rd.result);
+      if (d.ranges) state.ranges = d.ranges;
+      if (Array.isArray(d.sessions)) state.sessions = d.sessions;
+      if (Array.isArray(d.players)) state.players = d.players;
+      if (d.current && Array.isArray(d.current.hands)) state.current = d.current;
+      $('buyIn').value = state.current.buyIn ?? '';
+      $('stack').value = state.current.stack ?? '';
+      renderAll();
+      showToast('Imported: '+state.sessions.length+' sessions'+(state.current.hands.length?(' + a session in progress ('+state.current.hands.length+' hands)'):'')+'.', 4500);
+    } catch(err){ showToast('Could not read that file.'); }
+  };
+  rd.readAsText(f);
+  e.target.value='';
+};
+window.addEventListener('beforeunload', e=>{
+  if (dirty && persistLocal()) dirty = false;
+  if (dirty && (state.current.hands.length || state.sessions.length)){ e.preventDefault(); e.returnValue=''; }
+});
+
+/* ====== TABS & THEME ====== */
+document.querySelectorAll('nav button').forEach(b=>{
+  b.onclick = ()=>{
+    document.querySelectorAll('nav button').forEach(x=>x.classList.remove('on'));
+    document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+    b.classList.add('on');
+    $('tab-'+b.dataset.tab).classList.add('on');
+    if (b.dataset.tab==='history'){ renderScatter(); renderSessTable(); }
+  };
+});
+const THEMES=['auto','light','dark'];
+let themeIx=0;
+$('themeBtn').onclick=()=>{
+  themeIx=(themeIx+1)%3;
+  const t=THEMES[themeIx];
+  if(t==='auto') document.documentElement.removeAttribute('data-theme');
+  else document.documentElement.setAttribute('data-theme',t);
+  esc($('themeBtn'), t.charAt(0).toUpperCase()+t.slice(1));
+};
+
+/* ====== INIT ====== */
+function renderAll(){
+  esc($('sessDate'), 'Session · '+state.current.date);
+  renderChipsSess(); refreshSessionMatrix();
+  renderPlayerList();
+  renderHandList(); renderKPIs();
+  renderChipsRange(); refreshRangeMatrix();
+  renderScatter(); renderSessTable();
+}
+function renderChipsSess(){
+  renderChips('posChips', selPos, p=>{ selPos=p; renderChipsSess(); refreshSessionMatrix(); if(pending) openPending(pending); });
+}
+function renderChipsRange(){
+  renderChips('rPosChips', rSelPos, p=>{ rSelPos=p; renderChipsRange(); refreshRangeMatrix(); });
+}
+// villain pos + board type selects
+POSITIONS.forEach(p=>{ const o=document.createElement('option'); o.value=p; esc(o,p); $('pVpos').appendChild(o); });
+BOARD_TYPES.forEach(bt=>{ const o=document.createElement('option'); o.value=bt; esc(o,bt); $('pBoardType').appendChild(o); });
+renderStructTable('tblIP', STRUCTURE.IP);
+renderStructTable('tblOOP', STRUCTURE.OOP);
+renderStructTable('tblMW', STRUCTURE.MW);
+loadLocal();
+$('buyIn').value = state.current.buyIn ?? '';
+$('stack').value = state.current.stack ?? '';
+renderAll();
+</script>
+</body>
+</html>
