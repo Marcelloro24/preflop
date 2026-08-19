@@ -194,24 +194,17 @@
     <div class="kpis">
       <div class="tile"><div class="lbl">Preflop score</div><div class="val" id="kScore">&ndash;</div><div class="d" id="kScoreD"></div></div>
       <div class="tile"><div class="lbl">Session P/L</div><div class="val" id="kPL">$0</div><div class="d" id="kPLD">from hands</div></div>
-      <div class="tile"><div class="lbl">Hands</div><div class="val" id="kHands">0</div><div class="d" id="kHandsD"></div><svg id="spark" width="100%" height="22" viewBox="0 0 100 22" preserveAspectRatio="none"></svg></div>
+      <div class="tile"><div class="lbl">Hands</div><div class="val" id="kHands">0</div><div class="d" id="kHandsD"></div></div>
+    </div>
+
+    <div class="card">
+      <h2>Session curve &middot; cumulative P/L</h2>
+      <div id="bigChartBox"></div>
     </div>
 
     <div class="banner" id="fbBanner">
       <div class="t" id="fbTitle">Ready</div>
       <div class="m" id="fbMsg">Pick your position, tap the hand you were dealt, and log what you did. I'll score your preflop discipline as you go.</div>
-    </div>
-
-    <div class="card">
-      <h2>Players at the table</h2>
-      <div class="frm row2" style="margin-bottom:8px">
-        <div><input type="text" id="plName" placeholder="Name / seat"></div>
-        <div style="display:flex;gap:8px">
-          <select id="plTag" style="flex:1"><option>Unknown</option><option>Fish</option><option>Reg</option><option>Aggro</option><option>Tight</option><option>Calling station</option><option>Maniac</option></select>
-          <button class="btn small" id="plAdd">Add</button>
-        </div>
-      </div>
-      <div id="playerList"><div class="note">Add the players you care about — you'll tag them in each hand and can keep notes on them.</div></div>
     </div>
 
     <div class="card">
@@ -321,6 +314,21 @@
     </div>
   </div>
 
+  <!-- ================= PLAYERS TAB ================= -->
+  <div class="tab" id="tab-players">
+    <div class="card">
+      <h2>Players at the table</h2>
+      <div class="frm row2" style="margin-bottom:8px">
+        <div><input type="text" id="plName" placeholder="Name / seat"></div>
+        <div style="display:flex;gap:8px">
+          <select id="plTag" style="flex:1"><option>Unknown</option><option>Fish</option><option>Reg</option><option>Aggro</option><option>Tight</option><option>Calling station</option><option>Maniac</option></select>
+          <button class="btn small" id="plAdd">Add</button>
+        </div>
+      </div>
+      <div id="playerList"><div class="note">Add the players you care about — you'll tag them in each hand and can keep notes on them.</div></div>
+    </div>
+  </div>
+
   <!-- ================= FLOP TAB ================= -->
   <div class="tab" id="tab-flop">
     <div class="card"><h2>IP heads-up &middot; flop</h2><div style="overflow-x:auto"><table id="tblIP"></table></div></div>
@@ -335,6 +343,7 @@
   <button data-tab="session" class="on"><span class="ic">&#9824;</span>Session</button>
   <button data-tab="history"><span class="ic">&#9670;</span>History</button>
   <button data-tab="ranges"><span class="ic">&#9638;</span>Ranges</button>
+  <button data-tab="players"><span class="ic">&#9823;</span>Players</button>
   <button data-tab="flop"><span class="ic">&#9776;</span>Flop</button>
 </nav>
 
@@ -483,7 +492,7 @@ function renderKPIs(){
   esc($('kHands'), String(hands.length));
   const counts = {Y:0,D:0,N:0,F:0}; hands.forEach(h=>counts[h.verdict]++);
   esc($('kHandsD'), hands.length? (counts.Y+' yes · '+counts.D+' dep · '+(counts.N+counts.F)+' bad') : '');
-  renderSpark();
+  renderBigChart();
   // feedback banner
   const b = $('fbBanner'), q = hands.length>=3 ? quadrant(score, pl) : null;
   if (!q){
@@ -497,24 +506,62 @@ function renderKPIs(){
     esc($('fbMsg'), q.msg);
   }
 }
-function renderSpark(){
-  const svg = $('spark'); svg.innerHTML='';
+function renderBigChart(){
+  const box = $('bigChartBox'); if (!box) return; box.innerHTML='';
   const hands = state.current.hands;
-  if (hands.length<2) return;
-  let cum=0; const pts = hands.map(h=>cum+=(h.money||0));
+  if (hands.length<2){
+    const n=document.createElement('div'); n.className='note'; n.style.marginTop='0';
+    esc(n, hands.length ? 'One hand logged \u2014 the curve starts at two.' : 'Your running P/L will draw here as you log hands.');
+    box.appendChild(n); return;
+  }
+  let cum=0; const pts=[0]; hands.forEach(h=>pts.push(cum+=(h.money||0)));
+  const W=520, H=210, m={t:12,r:14,b:24,l:52};
+  const iw=W-m.l-m.r, ih=H-m.t-m.b;
   const min=Math.min(0,...pts), max=Math.max(0,...pts), span=(max-min)||1;
-  const xs = pts.map((v,i)=>[(i/(pts.length-1))*96+2, 20-((v-min)/span)*18+1]);
-  const d = xs.map((p,i)=>(i?'L':'M')+p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ');
-  const path = document.createElementNS('http://www.w3.org/2000/svg','path');
-  path.setAttribute('d',d); path.setAttribute('fill','none');
-  path.setAttribute('stroke','var(--ink-3)'); path.setAttribute('stroke-width','1.5');
-  path.setAttribute('stroke-linejoin','round'); path.setAttribute('stroke-linecap','round');
-  svg.appendChild(path);
-  const last = xs[xs.length-1];
-  const dot = document.createElementNS('http://www.w3.org/2000/svg','circle');
-  dot.setAttribute('cx',last[0]); dot.setAttribute('cy',last[1]); dot.setAttribute('r','2.4');
-  dot.setAttribute('fill','var(--series-1)');
-  svg.appendChild(dot);
+  const X=i=>m.l+(i/(pts.length-1))*iw, Y=v=>m.t+((max-v)/span)*ih;
+  const NS='http://www.w3.org/2000/svg';
+  const svg=document.createElementNS(NS,'svg');
+  svg.setAttribute('viewBox','0 0 '+W+' '+H); svg.setAttribute('width','100%'); svg.style.display='block';
+  function el(t,attrs,txt){ const e=document.createElementNS(NS,t); for(const k in attrs) e.setAttribute(k,attrs[k]); if(txt!==undefined) e.textContent=txt; svg.appendChild(e); return e; }
+  // win/loss washes around the zero line
+  if (max>0) el('rect',{x:m.l,y:Y(max),width:iw,height:Y(0)-Y(max),fill:'var(--good-wash)',opacity:'.45'});
+  if (min<0) el('rect',{x:m.l,y:Y(0),width:iw,height:Y(min)-Y(0),fill:'var(--critical-wash)',opacity:'.45'});
+  // zero baseline + extent gridlines
+  el('line',{x1:m.l,y1:Y(0),x2:W-m.r,y2:Y(0),stroke:'var(--baseline)','stroke-width':'1'});
+  [max,min].forEach(v=>{ if (v!==0) el('line',{x1:m.l,y1:Y(v),x2:W-m.r,y2:Y(v),stroke:'var(--grid)','stroke-width':'1'}); });
+  // y labels
+  const yl={fill:'var(--ink-3)','font-size':'10','text-anchor':'end'};
+  [[max],[0],[min]].forEach(([v])=>{ el('text',Object.assign({x:m.l-7,y:Y(v)+3.5},yl), fmtMoney(v)); });
+  // x labels: hand numbers at start/end
+  el('text',{x:X(0),y:H-8,'text-anchor':'start',fill:'var(--ink-3)','font-size':'10'},'start');
+  el('text',{x:X(pts.length-1),y:H-8,'text-anchor':'end',fill:'var(--ink-3)','font-size':'10'},'hand '+hands.length);
+  // the line
+  const d = pts.map((v,i)=>(i?'L':'M')+X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ');
+  el('path',{d,fill:'none',stroke:'var(--series-1)','stroke-width':'2','stroke-linejoin':'round','stroke-linecap':'round'});
+  // hoverable points (skip index 0 = start)
+  const tip=$('tooltip');
+  hands.forEach((h,hi)=>{
+    const i=hi+1, cx=X(i), cy=Y(pts[i]);
+    el('circle',{cx,cy,r:'6',fill:'var(--surface-1)'});
+    el('circle',{cx,cy,r:'3.5',fill:'var(--series-1)'});
+    const hit=el('circle',{cx,cy,r:'13',fill:'transparent',tabindex:'0',role:'img','aria-label':'Hand '+i+' '+h.label+' '+fmtMoney(h.money)+', total '+fmtMoney(pts[i])});
+    hit.style.cursor='pointer';
+    function show(ev){
+      tip.innerHTML='';
+      const tv=document.createElement('div'); tv.className='tv'; esc(tv, fmtMoney(pts[i])+' total');
+      const tl=document.createElement('div'); tl.className='tl'; esc(tl, 'Hand '+i+' \u00b7 '+h.label+' ('+h.pos+') \u00b7 '+fmtMoney(h.money));
+      tip.append(tv,tl);
+      tip.style.display='block';
+      const e=ev.touches?ev.touches[0]:ev;
+      tip.style.left=Math.min(window.innerWidth-190,(e.clientX+10))+'px';
+      tip.style.top=(e.clientY-48)+'px';
+    }
+    hit.addEventListener('pointermove',show);
+    hit.addEventListener('pointerdown',show);
+    hit.addEventListener('pointerleave',()=>tip.style.display='none');
+    hit.addEventListener('blur',()=>tip.style.display='none');
+  });
+  box.appendChild(svg);
 }
 
 /* ====== RENDER: position chips & matrix ====== */
@@ -603,7 +650,7 @@ function renderSignChips(){
 function renderPPlayers(){
   const box = $('pPlayers'); if(!box) return;
   box.innerHTML='';
-  if (!state.players.length){ const n=document.createElement('span'); n.className='note'; esc(n,'Add players above to tag them here.'); box.appendChild(n); return; }
+  if (!state.players.length){ const n=document.createElement('span'); n.className='note'; esc(n,'Add players in the Players tab to tag them here.'); box.appendChild(n); return; }
   state.players.forEach(p=>{
     const c=document.createElement('button'); c.className='chip'+(pInHand.includes(p.id)?' on':'');
     esc(c, p.name+(p.tag && p.tag!=='Unknown' ? ' · '+p.tag : ''));
@@ -730,8 +777,10 @@ $('endSessBtn').onclick = ()=>{
   renderAll();
   showToast('Session saved: score '+score+', '+fmtMoney(pl)+(q?' — '+q.tag:'')+'. Export from History to back it up.', 5000);
 };
-$('buyIn').onchange = e=>{ const v=parseFloat(e.target.value); state.current.buyIn=isNaN(v)?null:v; dirty=true; renderKPIs(); };
-$('stack').onchange = e=>{ const v=parseFloat(e.target.value); state.current.stack=isNaN(v)?null:v; dirty=true; renderKPIs(); };
+['input','change'].forEach(ev=>{
+  $('buyIn').addEventListener(ev, e=>{ const v=parseFloat(e.target.value); state.current.buyIn=isNaN(v)?null:v; dirty=true; renderKPIs(); });
+  $('stack').addEventListener(ev, e=>{ const v=parseFloat(e.target.value); state.current.stack=isNaN(v)?null:v; dirty=true; renderKPIs(); });
+});
 
 /* ====== HISTORY: scatter + table ====== */
 function scatterData(){
