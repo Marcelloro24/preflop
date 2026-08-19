@@ -15,7 +15,7 @@
     --surface-1:#fcfcfb; --page:#f9f9f7;
     --ink-1:#0b0b0b; --ink-2:#52514e; --ink-3:#898781;
     --grid:#e1e0d9; --baseline:#c3c2b7; --border:rgba(11,11,11,0.10);
-    --series-1:#2a78d6;
+    --series-1:#2a78d6; --series-2:#c34fa0;
     --good:#0ca30c; --warn:#fab219; --serious:#ec835a; --critical:#d03b3b;
     --good-wash:rgba(12,163,12,.14); --warn-wash:rgba(250,178,25,.20);
     --serious-wash:rgba(236,131,90,.20); --critical-wash:rgba(208,59,59,.14);
@@ -26,7 +26,7 @@
     --surface-1:#1a1a19; --page:#0d0d0d;
     --ink-1:#ffffff; --ink-2:#c3c2b7; --ink-3:#898781;
     --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
-    --series-1:#3987e5;
+    --series-1:#3987e5; --series-2:#d466ae;
     --good-wash:rgba(12,163,12,.22); --warn-wash:rgba(250,178,25,.24);
     --serious-wash:rgba(236,131,90,.24); --critical-wash:rgba(208,59,59,.24);
     --cell-fish:#242423; --cell-fish-ink:#6d6c66;
@@ -37,7 +37,7 @@
       --surface-1:#1a1a19; --page:#0d0d0d;
       --ink-1:#ffffff; --ink-2:#c3c2b7; --ink-3:#898781;
       --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
-      --series-1:#3987e5;
+      --series-1:#3987e5; --series-2:#d466ae;
       --good-wash:rgba(12,163,12,.22); --warn-wash:rgba(250,178,25,.24);
       --serious-wash:rgba(236,131,90,.24); --critical-wash:rgba(208,59,59,.24);
       --cell-fish:#242423; --cell-fish-ink:#6d6c66;
@@ -198,7 +198,7 @@
     </div>
 
     <div class="card">
-      <h2>Session curve &middot; cumulative P/L</h2>
+      <h2>Session curve &middot; P/L &amp; preflop score</h2>
       <div id="bigChartBox"></div>
     </div>
 
@@ -511,56 +511,81 @@ function renderBigChart(){
   const hands = state.current.hands;
   if (hands.length<2){
     const n=document.createElement('div'); n.className='note'; n.style.marginTop='0';
-    esc(n, hands.length ? 'One hand logged \u2014 the curve starts at two.' : 'Your running P/L will draw here as you log hands.');
+    esc(n, hands.length ? 'One hand logged \u2014 the curves start at two.' : 'Your running P/L and preflop score will draw here as you log hands.');
     box.appendChild(n); return;
   }
+  // series 1: cumulative P/L (index 0 = session start)
   let cum=0; const pts=[0]; hands.forEach(h=>pts.push(cum+=(h.money||0)));
-  const W=520, H=210, m={t:12,r:14,b:24,l:52};
-  const iw=W-m.l-m.r, ih=H-m.t-m.b;
-  const min=Math.min(0,...pts), max=Math.max(0,...pts), span=(max-min)||1;
-  const X=i=>m.l+(i/(pts.length-1))*iw, Y=v=>m.t+((max-v)/span)*ih;
+  // series 2: running preflop score after each hand
+  let wsum=0; const sc=[null]; hands.forEach((h,i)=>{ wsum+=WEIGHTS[h.verdict]; sc.push(Math.round(wsum/(i+1))); });
+  const W=520, m={r:14,l:52};
+  const t1=20, h1=148, t2=t1+h1+34, h2=92, H=t2+h2+26;
+  const iw=W-m.l-m.r;
+  const X=i=>m.l+(i/(pts.length-1))*iw;
   const NS='http://www.w3.org/2000/svg';
   const svg=document.createElementNS(NS,'svg');
   svg.setAttribute('viewBox','0 0 '+W+' '+H); svg.setAttribute('width','100%'); svg.style.display='block';
   function el(t,attrs,txt){ const e=document.createElementNS(NS,t); for(const k in attrs) e.setAttribute(k,attrs[k]); if(txt!==undefined) e.textContent=txt; svg.appendChild(e); return e; }
-  // win/loss washes around the zero line
-  if (max>0) el('rect',{x:m.l,y:Y(max),width:iw,height:Y(0)-Y(max),fill:'var(--good-wash)',opacity:'.45'});
-  if (min<0) el('rect',{x:m.l,y:Y(0),width:iw,height:Y(min)-Y(0),fill:'var(--critical-wash)',opacity:'.45'});
-  // zero baseline + extent gridlines
-  el('line',{x1:m.l,y1:Y(0),x2:W-m.r,y2:Y(0),stroke:'var(--baseline)','stroke-width':'1'});
-  [max,min].forEach(v=>{ if (v!==0) el('line',{x1:m.l,y1:Y(v),x2:W-m.r,y2:Y(v),stroke:'var(--grid)','stroke-width':'1'}); });
-  // y labels
-  const yl={fill:'var(--ink-3)','font-size':'10','text-anchor':'end'};
-  [[max],[0],[min]].forEach(([v])=>{ el('text',Object.assign({x:m.l-7,y:Y(v)+3.5},yl), fmtMoney(v)); });
-  // x labels: hand numbers at start/end
-  el('text',{x:X(0),y:H-8,'text-anchor':'start',fill:'var(--ink-3)','font-size':'10'},'start');
-  el('text',{x:X(pts.length-1),y:H-8,'text-anchor':'end',fill:'var(--ink-3)','font-size':'10'},'hand '+hands.length);
-  // the line
-  const d = pts.map((v,i)=>(i?'L':'M')+X(i).toFixed(1)+','+Y(v).toFixed(1)).join(' ');
-  el('path',{d,fill:'none',stroke:'var(--series-1)','stroke-width':'2','stroke-linejoin':'round','stroke-linecap':'round'});
-  // hoverable points (skip index 0 = start)
   const tip=$('tooltip');
-  hands.forEach((h,hi)=>{
-    const i=hi+1, cx=X(i), cy=Y(pts[i]);
-    el('circle',{cx,cy,r:'6',fill:'var(--surface-1)'});
-    el('circle',{cx,cy,r:'3.5',fill:'var(--series-1)'});
-    const hit=el('circle',{cx,cy,r:'13',fill:'transparent',tabindex:'0',role:'img','aria-label':'Hand '+i+' '+h.label+' '+fmtMoney(h.money)+', total '+fmtMoney(pts[i])});
-    hit.style.cursor='pointer';
+  function hover(hit, val, sub){
     function show(ev){
       tip.innerHTML='';
-      const tv=document.createElement('div'); tv.className='tv'; esc(tv, fmtMoney(pts[i])+' total');
-      const tl=document.createElement('div'); tl.className='tl'; esc(tl, 'Hand '+i+' \u00b7 '+h.label+' ('+h.pos+') \u00b7 '+fmtMoney(h.money));
+      const tv=document.createElement('div'); tv.className='tv'; esc(tv, val);
+      const tl=document.createElement('div'); tl.className='tl'; esc(tl, sub);
       tip.append(tv,tl);
       tip.style.display='block';
       const e=ev.touches?ev.touches[0]:ev;
       tip.style.left=Math.min(window.innerWidth-190,(e.clientX+10))+'px';
       tip.style.top=(e.clientY-48)+'px';
     }
+    hit.style.cursor='pointer';
     hit.addEventListener('pointermove',show);
     hit.addEventListener('pointerdown',show);
     hit.addEventListener('pointerleave',()=>tip.style.display='none');
     hit.addEventListener('blur',()=>tip.style.display='none');
+  }
+  const ttl={fill:'var(--ink-2)','font-size':'10','font-weight':'600','letter-spacing':'.05em'};
+  const yl={fill:'var(--ink-3)','font-size':'10','text-anchor':'end'};
+
+  /* ---- panel 1: cumulative P/L ---- */
+  const min=Math.min(0,...pts), max=Math.max(0,...pts), span=(max-min)||1;
+  const Y1=v=>t1+((max-v)/span)*h1;
+  el('text',Object.assign({x:m.l,y:t1-8},ttl),'P/L');
+  if (max>0) el('rect',{x:m.l,y:Y1(max),width:iw,height:Y1(0)-Y1(max),fill:'var(--good-wash)',opacity:'.45'});
+  if (min<0) el('rect',{x:m.l,y:Y1(0),width:iw,height:Y1(min)-Y1(0),fill:'var(--critical-wash)',opacity:'.45'});
+  el('line',{x1:m.l,y1:Y1(0),x2:W-m.r,y2:Y1(0),stroke:'var(--baseline)','stroke-width':'1'});
+  [max,min].forEach(v=>{ if (v!==0) el('line',{x1:m.l,y1:Y1(v),x2:W-m.r,y2:Y1(v),stroke:'var(--grid)','stroke-width':'1'}); });
+  [[max],[0],[min]].forEach(([v])=>{ el('text',Object.assign({x:m.l-7,y:Y1(v)+3.5},yl), fmtMoney(v)); });
+  const d1 = pts.map((v,i)=>(i?'L':'M')+X(i).toFixed(1)+','+Y1(v).toFixed(1)).join(' ');
+  el('path',{d:d1,fill:'none',stroke:'var(--series-1)','stroke-width':'2','stroke-linejoin':'round','stroke-linecap':'round'});
+  hands.forEach((h,hi)=>{
+    const i=hi+1, cx=X(i), cy=Y1(pts[i]);
+    el('circle',{cx,cy,r:'6',fill:'var(--surface-1)'});
+    el('circle',{cx,cy,r:'3.5',fill:'var(--series-1)'});
+    const hit=el('circle',{cx,cy,r:'13',fill:'transparent',tabindex:'0',role:'img','aria-label':'Hand '+i+' '+h.label+' '+fmtMoney(h.money)+', total '+fmtMoney(pts[i])});
+    hover(hit, fmtMoney(pts[i])+' total', 'Hand '+i+' \u00b7 '+h.label+' ('+h.pos+') \u00b7 '+fmtMoney(h.money));
   });
+
+  /* ---- panel 2: running preflop score ---- */
+  const Y2=v=>t2+((100-v)/100)*h2;
+  el('text',Object.assign({x:m.l,y:t2-8},ttl),'PREFLOP SCORE');
+  el('rect',{x:m.l,y:Y2(100),width:iw,height:Y2(SCORE_GOOD)-Y2(100),fill:'var(--good-wash)',opacity:'.35'});
+  el('line',{x1:m.l,y1:Y2(SCORE_GOOD),x2:W-m.r,y2:Y2(SCORE_GOOD),stroke:'var(--baseline)','stroke-width':'1','stroke-dasharray':'4 3'});
+  el('line',{x1:m.l,y1:Y2(0),x2:W-m.r,y2:Y2(0),stroke:'var(--grid)','stroke-width':'1'});
+  [[100],[SCORE_GOOD],[0]].forEach(([v])=>{ el('text',Object.assign({x:m.l-7,y:Y2(v)+3.5},yl), String(v)); });
+  const d2 = sc.map((v,i)=>v===null?'':((i===1?'M':'L')+X(i).toFixed(1)+','+Y2(v).toFixed(1))).join(' ').trim();
+  el('path',{d:d2,fill:'none',stroke:'var(--series-2)','stroke-width':'2','stroke-linejoin':'round','stroke-linecap':'round'});
+  hands.forEach((h,hi)=>{
+    const i=hi+1, cx=X(i), cy=Y2(sc[i]);
+    el('circle',{cx,cy,r:'6',fill:'var(--surface-1)'});
+    el('circle',{cx,cy,r:'3.5',fill:'var(--series-2)'});
+    const hit=el('circle',{cx,cy,r:'13',fill:'transparent',tabindex:'0',role:'img','aria-label':'Score '+sc[i]+' after hand '+i});
+    hover(hit, 'Score '+sc[i], 'After hand '+i+' \u00b7 '+h.label+' was '+VSHORT[h.verdict]);
+  });
+
+  // shared x labels under panel 2
+  el('text',{x:X(0),y:H-8,'text-anchor':'start',fill:'var(--ink-3)','font-size':'10'},'start');
+  el('text',{x:X(pts.length-1),y:H-8,'text-anchor':'end',fill:'var(--ink-3)','font-size':'10'},'hand '+hands.length);
   box.appendChild(svg);
 }
 
