@@ -169,6 +169,8 @@
   .q-lw { background:var(--serious-wash); color:var(--serious); }
   .q-el { background:var(--critical-wash); color:var(--critical); }
   .sesshead { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  #sessTable tbody tr { cursor:pointer; }
+  .review-pill { display:inline-block; font-size:10px; font-weight:700; background:var(--series-1); color:#fff; border-radius:5px; padding:2px 7px; margin-left:6px; vertical-align:middle; }
   .sesshead .dt { font-size:13px; font-weight:600; color:var(--ink-2); }
   /* score mood states */
   #scoreTile { position:relative; overflow:hidden; transition:background .5s, border-color .5s; }
@@ -240,12 +242,12 @@
       <div class="m" id="fbMsg">Pick your position, tap the hand you were dealt, and log what you did. I'll score your preflop discipline as you go.</div>
     </div>
 
-    <div class="card">
+    <div class="card" id="posCard">
       <h2>Your position</h2>
       <div class="chips" id="posChips"></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="mtxCard">
       <h2>Hand dealt &middot; <span id="mtxPosLbl"></span></h2>
       <div class="matrix" id="matrix"></div>
       <div class="mlegend">
@@ -290,7 +292,7 @@
       <div id="handList"><div class="note">No hands logged yet.</div></div>
     </div>
 
-    <div class="card">
+    <div class="card" id="stackCard">
       <h2>Stack tracking (optional)</h2>
       <div class="frm row2">
         <div><label>Total buy-ins $</label><input type="number" id="buyIn" inputmode="numeric" placeholder="1000"></div>
@@ -318,6 +320,7 @@
         <tbody></tbody>
       </table></div>
       <div class="note" id="histEmpty">No finished sessions yet. End a session and it lands here.</div>
+      <div class="note" id="histHint" style="display:none">Tap a session to open it on the main page for review.</div>
     </div>
     <div class="card">
       <h2>Backup</h2>
@@ -429,6 +432,7 @@ function newSession(){
            hands: [], buyIn: null, stack: null };
 }
 let selPos = 'BTN', rSelPos = 'BTN', rEditMode = false;
+let reviewIdx = null;   // when set, the Session tab shows a finished session read-only
 let pending = null;   // {hand, type, key}
 let dirty = false;
 /* Auto-save: works when the app runs from a real web address (hosted page or
@@ -488,6 +492,43 @@ function showToast(msg, ms){
   toastTimer = setTimeout(()=>{ t.style.display='none'; }, ms||3200);
 }
 
+function activeSession(){
+  if (reviewIdx===null) return state.current;
+  const rec = state.sessions[reviewIdx];
+  return (rec && rec.detail && Array.isArray(rec.detail.hands)) ? rec.detail
+       : { date: rec?rec.date:'', hands:[], buyIn:null, stack:null };
+}
+function applyReviewMode(){
+  const rv = reviewIdx!==null;
+  const dt = $('sessDate');
+  dt.innerHTML='';
+  if (rv){
+    const rec = state.sessions[reviewIdx];
+    dt.appendChild(document.createTextNode('Session \u00b7 '+(activeSession().date||rec.date)));
+    const pill=document.createElement('span'); pill.className='review-pill'; esc(pill,'REVIEW');
+    dt.appendChild(pill);
+  } else {
+    dt.appendChild(document.createTextNode('Session \u00b7 '+state.current.date));
+  }
+  esc($('endSessBtn'), rv ? 'Back to live' : 'End session');
+  ['posCard','mtxCard','stackCard'].forEach(id=>{ $(id).style.display = rv ? 'none' : ''; });
+  if (rv){ pending=null; $('pendingCard').style.display='none'; }
+}
+function openReview(idx){
+  reviewIdx = idx;
+  document.querySelectorAll('nav button').forEach(x=>x.classList.remove('on'));
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('on'));
+  document.querySelector('nav button[data-tab="session"]').classList.add('on');
+  $('tab-session').classList.add('on');
+  expandedId = null;
+  applyReviewMode(); renderKPIs(); renderHandList();
+  window.scrollTo(0,0);
+}
+function exitReview(){
+  reviewIdx = null; expandedId = null;
+  applyReviewMode(); renderKPIs(); renderHandList();
+}
+
 /* ====== SCORING & FEEDBACK ====== */
 function sessionScore(hands){
   if (!hands.length) return null;
@@ -515,7 +556,7 @@ function quadrant(score, pl){
 
 /* ====== RENDER: session KPIs & feedback ====== */
 function renderKPIs(){
-  const s = state.current, hands = s.hands;
+  const s = activeSession(), hands = s.hands;
   const score = sessionScore(hands);
   const { pl, src } = sessionPL(s);
   esc($('kScore'), score===null?'–':String(score));
@@ -554,10 +595,10 @@ function renderKPIs(){
 }
 function renderBigChart(){
   const box = $('bigChartBox'); if (!box) return; box.innerHTML='';
-  const hands = state.current.hands;
+  const hands = activeSession().hands;
   if (hands.length<2){
     const n=document.createElement('div'); n.className='note'; n.style.marginTop='0';
-    esc(n, hands.length ? 'One hand logged \u2014 the curve starts at two.' : 'Your running P/L will draw here as you log hands.');
+    esc(n, hands.length ? 'One hand logged \u2014 the curve starts at two.' : (reviewIdx!==null ? 'No per-hand detail stored for this session.' : 'Your running P/L will draw here as you log hands.'));
     box.appendChild(n); return;
   }
   let cum=0; const pts=[0]; hands.forEach(h=>pts.push(cum+=(h.money||0)));
@@ -752,7 +793,7 @@ $('pLog').onclick = ()=>{
 /* ====== HAND LIST ====== */
 let expandedId = null;
 function renderHandList(){
-  const hands = state.current.hands;
+  const hands = activeSession().hands;
   esc($('handCount'), String(hands.length));
   const box = $('handList'); box.innerHTML='';
   if (!hands.length){ const n=document.createElement('div'); n.className='note'; esc(n,'No hands logged yet.'); box.appendChild(n); return; }
@@ -767,7 +808,20 @@ function renderHandList(){
     r.append(pos,nm,vc,act,mo);
     r.onclick=()=>{ expandedId = expandedId===h.id?null:h.id; renderHandList(); };
     box.appendChild(r);
-    if (expandedId===h.id){
+    if (expandedId===h.id && reviewIdx!==null){
+      const e=document.createElement('div'); e.className='hedit frm';
+      const meta = [];
+      if (h.board) meta.push('Board: '+h.board);
+      if (h.vpos) meta.push('vs '+h.vpos);
+      if (h.players && h.players.length) meta.push('In hand: '+h.players.join(', '));
+      if (h.postflop) meta.push('Postflop: '+h.postflop);
+      if (meta.length){ const b=document.createElement('div'); b.className='note'; esc(b, meta.join(' \u00b7 ')); e.appendChild(b); }
+      const nb=document.createElement('div'); nb.className='note';
+      esc(nb, h.note ? 'Note: '+h.note : 'No note on this hand.');
+      e.appendChild(nb);
+      box.appendChild(e);
+    }
+    else if (expandedId===h.id){
       const e=document.createElement('div'); e.className='hedit frm';
       const l1=document.createElement('label'); esc(l1,'Result');
       const rowm=document.createElement('div'); rowm.style.cssText='display:flex;gap:8px;align-items:center';
@@ -806,6 +860,7 @@ function renderHandList(){
 
 /* ====== END SESSION ====== */
 $('endSessBtn').onclick = ()=>{
+  if (reviewIdx!==null){ exitReview(); return; }
   const s = state.current;
   if (!s.hands.length){ showToast('No hands logged yet — nothing to save.'); return; }
   const score = sessionScore(s.hands), { pl } = sessionPL(s);
@@ -898,6 +953,7 @@ function renderScatter(){
 function renderSessTable(){
   const tb = $('sessTable').querySelector('tbody'); tb.innerHTML='';
   $('histEmpty').style.display = state.sessions.length?'none':'block';
+  $('histHint').style.display = state.sessions.length?'block':'none';
   [...state.sessions].reverse().forEach((s,ri)=>{
     const idx = state.sessions.length-1-ri;
     const tr=document.createElement('tr');
@@ -911,12 +967,16 @@ function renderSessTable(){
     const xTd=document.createElement('td');
     const xb=document.createElement('button'); xb.className='btn danger small'; esc(xb,'×');
     let armed=false, armTimer=null;
-    xb.onclick=()=>{
+    xb.onclick=ev=>{
+      ev.stopPropagation();
       if(!armed){ armed=true; esc(xb,'Sure?'); armTimer=setTimeout(()=>{ armed=false; esc(xb,'×'); },2500); return; }
       clearTimeout(armTimer);
-      state.sessions.splice(idx,1); dirty=true; renderSessTable(); renderScatter();
+      state.sessions.splice(idx,1); dirty=true;
+      if (reviewIdx!==null) exitReview();
+      renderSessTable(); renderScatter();
     };
     xTd.appendChild(xb); tr.appendChild(xTd);
+    tr.onclick=()=>openReview(idx);
     tb.appendChild(tr);
   });
 }
@@ -1013,7 +1073,8 @@ $('themeBtn').onclick=()=>{
 
 /* ====== INIT ====== */
 function renderAll(){
-  esc($('sessDate'), 'Session · '+state.current.date);
+  reviewIdx = null;
+  applyReviewMode();
   renderChipsSess(); refreshSessionMatrix();
   renderPlayerList();
   renderHandList(); renderKPIs();
